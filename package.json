@@ -1,0 +1,31 @@
+{
+  "name": "hubot-aws-github-jenkins",
+  "description": "Buffer all github webhooks until jenkins is available",
+  "version": "0.0.1",
+  "author": "Sébastien Requiem<sebastien.requiem@gmail.com>",
+  "homepage": "https://github.com/kiddouk/hubot-aws-github-jenkins",
+  "main": "./src/index.coffee",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/kiddouk/hubot-aws-github-jenkins.git"
+  },
+  "license": "MIT",
+  "keywords": [
+    "hubot",
+    "schedule",
+    "aws",
+    "jenkins",
+  ],
+  "dependencies": {
+    "node-schedule": "~0.5.1"
+  },
+  "bugs": {
+    "url": "https://github.com/kiddouk/hubot-aws-github-jenkins/issues"
+  },
+  "devDependencies": {
+    "hubot": "^2.17.0"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
