@@ -98,6 +98,11 @@ module.exports = (robot) ->
 
   robot.router.post '/github', (req, res) ->
     payload = req.body
+    eventType = req.headers["x-github-event"]
+    
+    if eventType == 'ping'
+      return res.json("OK")
+      
     client.lpushAsync 'github.push', JSON.stringify(payload)
       .then () ->
         res.json("OK")
