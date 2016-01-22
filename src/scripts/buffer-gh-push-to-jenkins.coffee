@@ -47,7 +47,6 @@ module.exports = (robot) ->
           client.lrangeAsync config.redis_key, 0, -1
             .then (pushes) ->
               return [] unless pushes.length
-              console.log config.jenkins_ping
               rp config.jenkins_ping
                 .then () ->
                   client.delAsync config.redis_key
@@ -64,9 +63,8 @@ module.exports = (robot) ->
                     if err?
                       console.log err
                       return announce_error(robot)
-                    console.log data
                     if data.AutoScalingGroups[0].DesiredCapacity == 1
-                      console.log "Just waiting for Jenkins to come up online"
+                      console.log "ASG is already at 1 instnace. Just waiting for Jenkins to come up online"
                       return
                       
                     params =
