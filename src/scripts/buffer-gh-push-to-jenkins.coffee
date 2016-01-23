@@ -97,8 +97,7 @@ module.exports = (robot) ->
         res.reply "Jenkins is dead. Just commit some code to wake him up"
 
 
-try_autoscale_up = (robot, res) ->
-  
+try_autoscaling_up = (robot, res) ->
   params =
     AutoScalingGroupNames: [config.aws_asg_name]
     MaxRecords: 1
@@ -106,17 +105,17 @@ try_autoscale_up = (robot, res) ->
   autoscaling.describeAutoScalingGroupsAsync params
     .then (data) ->
       if data.AutoScalingGroups[0].DesiredCapacity == 1
-        message = "ASG is already at 1 instance. Just waiting for Jenkins to come up online"
-        console.log message
+        console.log "ASG is already at 1 instance. Just waiting for Jenkins to come up online"
         if res?
-          res.reply message
+          res.reply "Jenkins instance is already started (or booting up). You can ping it with /ping jenkins/"
         return false
       params =
         AutoScalingGroupName: config.aws_asg_name,
         DesiredCapacity: 1,
         HonorCooldown: false
-      autoscaling.setDesiredCapacity params
+      autoscaling.setDesiredCapacityAsync params
     .then (data) ->
+      console.log data
       if data == false
         return
         
@@ -130,7 +129,6 @@ try_autoscale_up = (robot, res) ->
     .catch (err) ->
       console.log err
       return announce_error(robot)
-
   
 announce_error = (robot) ->
   destination =
