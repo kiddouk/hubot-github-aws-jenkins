@@ -36,65 +36,44 @@ rp = require('request-promise')
 AWS = require('aws-sdk')
 {TextMessage} = require('hubot')
 
+autoscaling = new AWS.AutoScaling({region: config.aws_regions})
+Promise.promisifyAll autoscaling
+
+client = Redis.createClient(config.redis_url)
+Promise.promisifyAll client
+
+
 module.exports = (robot) ->
-  client = Redis.createClient(config.redis_url)
-  Promise.promisifyAll client
 
   robot.brain.on 'loaded', =>
-        rule = new schedule.RecurrenceRule()
-        rule.minute = new schedule.Range(0, 59, 1)
-        schedule.scheduleJob rule, () ->
-          client.lrangeAsync config.redis_key, 0, -1
-            .then (pushes) ->
-              return [] unless pushes.length
-              rp config.jenkins_ping
+    rule = new schedule.RecurrenceRule()
+    rule.minute = new schedule.Range(0, 59, 1)
+    schedule.scheduleJob rule, () ->
+      client.lrangeAsync config.redis_key, 0, -1
+        .then (pushes) ->
+          return [] unless pushes.length
+          rp config.jenkins_ping
+            .then () ->
+              client.delAsync config.redis_key
                 .then () ->
-                  client.delAsync config.redis_key
-                    .then () ->
-                      return pushes
-                .catch (err) ->
-                  autoscaling = new AWS.AutoScaling({region: config.aws_regions})
-
-                  params =
-                    AutoScalingGroupNames: [config.aws_asg_name]
-                    MaxRecords: 1
-                    
-                  autoscaling.describeAutoScalingGroups params, (err, data) ->
-                    if err?
-                      console.log err
-                      return announce_error(robot)
-                    if data.AutoScalingGroups[0].DesiredCapacity == 1
-                      console.log "ASG is already at 1 instnace. Just waiting for Jenkins to come up online"
-                      return
-                      
-                    params =
-                      AutoScalingGroupName: config.aws_asg_name,
-                      DesiredCapacity: 1,
-                      HonorCooldown: false
-
-                    autoscaling.setDesiredCapacity params, (err, data) ->
-                      if err?
-                        console.log err
-                        return announce_error(robot)
-                      destination =
-                        room: config.announce_channel
-
-                      robot.send destination, "I received a Github push but our Jenkins seems to be down. Starting a new one..."
-                  return []
-          .map (push) ->
-            options =
-              method: 'POST',
-              uri: config.jenkins_url,
-              headers: {'x-github-event': 'push'}
-              body: JSON.parse push
-              json: true
-            rp(options)
-              .then (answer) ->
-                console.log "payload sent to Jenkins"
-              .catch (err) ->
-                console.log "NOK"
-                console.log err
-                client.lpush config.redis_key, push
+                  return pushes
+            .catch (err) ->
+              try_autoscaling_up robot
+              return []
+      .map (push) ->
+        options =
+          method: 'POST',
+          uri: config.jenkins_url,
+          headers: {'x-github-event': 'push'}
+          body: JSON.parse push
+          json: true
+        rp(options)
+          .then (answer) ->
+            console.log "payload sent to Jenkins"
+          .catch (err) ->
+            console.log "NOK"
+            console.log err
+            client.lpush config.redis_key, push
 
   robot.router.post '/github', (req, res) ->
     payload = req.body
@@ -107,13 +86,51 @@ module.exports = (robot) ->
       .then () ->
         res.json("OK")
 
+  robot.respond /start jenkins/i, (res) ->
+    try_autoscaling_up robot, res
+      
   robot.respond /ping jenkins/i, (res) ->
     rp config.jenkins_ping
       .then () ->
         res.reply "Jenkins is live at : " + config.jenkins_ping
       .catch (err) ->
         res.reply "Jenkins is dead. Just commit some code to wake him up"
+
+
+try_autoscale_up = (robot, res) ->
   
+  params =
+    AutoScalingGroupNames: [config.aws_asg_name]
+    MaxRecords: 1
+  
+  autoscaling.describeAutoScalingGroupsAsync params
+    .then (data) ->
+      if data.AutoScalingGroups[0].DesiredCapacity == 1
+        message = "ASG is already at 1 instance. Just waiting for Jenkins to come up online"
+        console.log message
+        if res?
+          res.reply message
+        return false
+      params =
+        AutoScalingGroupName: config.aws_asg_name,
+        DesiredCapacity: 1,
+        HonorCooldown: false
+      autoscaling.setDesiredCapacity params
+    .then (data) ->
+      if data == false
+        return
+        
+      if res?
+        res.reply "Jenkins started, it will take a few minutes to come online. Be patient."
+      else
+        destination =
+          room: config.announce_channel
+        robot.send destination, "I received a Github push but our Jenkins seems to be down. Starting a new one..."
+        
+    .catch (err) ->
+      console.log err
+      return announce_error(robot)
+
   
 announce_error = (robot) ->
   destination =
